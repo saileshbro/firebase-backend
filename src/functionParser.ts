@@ -3,12 +3,11 @@
 import cors from 'cors';
 import express, { Application, Router } from 'express';
 import fileUpload from 'express-fileupload';
-import * as functions from 'firebase-functions';
-import { SUPPORTED_REGIONS } from 'firebase-functions';
+import { HttpsOptions, onRequest } from 'firebase-functions/v2/https';
 import glob from 'glob';
-import { parse, ParsedPath } from 'path';
+import { ParsedPath, parse } from 'path';
 import { Endpoint, ParserOptions, RequestType } from './models';
-
+import { GlobalOptions } from 'firebase-functions/v2/options';
 // enable short hand for console.log()
 const { log } = console;
 /**
@@ -17,8 +16,8 @@ const { log } = console;
   rootPath: string;
   exports: any;
   options?: ParserOptions;
+  httpOptions?: HttpsOptions;
   verbose?: boolean;
-  regions?: Array<typeof SUPPORTED_REGIONS[number] | string>;
 }
 /**
  * This class helps with setting sup the exports for the cloud functions deployment.
@@ -37,21 +36,16 @@ export class FunctionParser {
   exports: any;
 
   verbose: boolean;
+  httpOptions: HttpsOptions;
 
-  regions: Array<typeof SUPPORTED_REGIONS[number] | string>;
   /**
    * Creates an instance of FunctionParser.
-   * @param {FunctionParserOptions} [config]
+   * @param {FunctionParserOptions} [props]
    * @memberof FunctionParser
    */
   constructor(props: FunctionParserOptions) {
-    const {
-      rootPath,
-      exports,
-      options,
-      verbose = false,
-      regions = ['us-central1'],
-    } = props;
+    const { rootPath, exports, options, verbose = false, httpOptions } = props;
+    this.httpOptions = httpOptions ?? {};
     if (!rootPath) {
       throw new Error('rootPath is required to find the functions.');
     }
@@ -59,7 +53,6 @@ export class FunctionParser {
     this.rootPath = rootPath;
     this.exports = exports;
     this.verbose = verbose;
-    this.regions = regions;
     // Set default option values for if not provided
     this.enableCors = options?.enableCors ?? false;
     let groupByFolder: boolean = options?.groupByFolder ?? true;
@@ -170,7 +163,7 @@ export class FunctionParser {
 
       this.exports[groupName] = {
         ...this.exports[groupName],
-        api: functions.region(...this.regions).https.onRequest(app),
+        api: onRequest(this.httpOptions, app),
       };
     });
 
