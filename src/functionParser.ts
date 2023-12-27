@@ -7,7 +7,6 @@ import { HttpsOptions, onRequest } from 'firebase-functions/v2/https';
 import glob from 'glob';
 import { ParsedPath, parse } from 'path';
 import { Endpoint, ParserOptions, RequestType } from './models';
-import { GlobalOptions } from 'firebase-functions/v2/options';
 // enable short hand for console.log()
 const { log } = console;
 /**
@@ -154,6 +153,7 @@ export class FunctionParser {
       try {
         this.buildEndpoint(file, groupName, router);
       } catch (e) {
+        console.error(e);
         throw new Error(
           `Restful Endpoints - Failed to add the endpoint defined in ${file} to the ${groupName} Api.`
         );
