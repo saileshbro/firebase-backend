@@ -1,13 +1,9 @@
 // functionParser.ts
 
-import cors from 'cors';
-import express from 'express';
-import fileUpload from 'express-fileupload';
-import * as functions from 'firebase-functions';
 import { SupportedRegion } from 'firebase-functions';
 import glob from 'glob';
 import { parse, ParsedPath } from 'path';
-import { Endpoint, ParserOptions, RequestType } from './models';
+import { ParserOptions } from './models';
 
 // enable short hand for console.log()
 const { log } = console;
@@ -64,14 +60,9 @@ export class FunctionParser {
     this.enableCors = options?.enableCors ?? false;
     let groupByFolder: boolean = options?.groupByFolder ?? true;
     let buildReactive: boolean = options?.buildReactive ?? true;
-    let buildEndpoints: boolean = options?.buildEndpoints ?? true;
 
     if (buildReactive) {
       this.buildReactiveFunctions(groupByFolder);
-    }
-
-    if (buildEndpoints) {
-      this.buildRestfulApi(groupByFolder);
     }
   }
 
@@ -120,130 +111,5 @@ export class FunctionParser {
       }
     });
     if (this.verbose) log('Reactive Functions - Built');
-  }
-
-  /**
-   * Looks at all .endpoint.js files and adds them to the group they belong in
-   *
-   * @private
-   * @param {boolean} groupByFolder
-   * @memberof FunctionParser
-   */
-  private buildRestfulApi(groupByFolder: boolean) {
-    if (this.verbose) log('Restful Endpoints - Building...');
-
-    const apiFiles: string[] = glob.sync(`${this.rootPath}/**/*.endpoint.js`, {
-      cwd: this.rootPath,
-      ignore: './node_modules/**',
-    });
-
-    const app = express();
-
-    const groupRouters: Map<string, express.Router> = new Map();
-
-    apiFiles.forEach((file: string) => {
-      const filePath: ParsedPath = parse(file);
-
-      const directories: Array<string> = filePath.dir.split('/');
-
-      const groupName: string = groupByFolder
-        ? directories[directories.length - 2] || ''
-        : directories[directories.length - 1] || '';
-
-      // Get or create router for this group
-      let router = groupRouters.get(groupName) || express.Router();
-
-      // Make sure to set the router in the map if it's new
-      if (!groupRouters.has(groupName)) {
-        groupRouters.set(groupName, router);
-      }
-
-      try {
-        this.buildEndpoint(file, groupName, router);
-      } catch (e) {
-        throw new Error(
-          `Restful Endpoints - Failed to add the endpoint defined in ${file} to the ${groupName} Api.`
-        );
-      }
-
-      app.use('/', router);
-
-      this.exports[groupName] = {
-        ...this.exports[groupName],
-        api: functions.https.onRequest(app),
-      };
-    });
-
-    if (this.verbose) log('Restful Endpoints - Built');
-  }
-
-  /**
-   * Parses a .endpoint.js file and sets the endpoint path on the provided router
-   *
-   * @private
-   * @param {string} file
-   * @param {express.Router} router
-   * @memberof FunctionParser
-   */
-  private buildEndpoint(
-    file: string,
-    groupName: string,
-    router: express.Router
-  ) {
-    const filePath: ParsedPath = parse(file);
-
-    const endpoint: Endpoint = require(file).default as Endpoint;
-
-    const name: string =
-      endpoint.name || filePath.name.replace('.endpoint', '');
-
-    const { handler } = endpoint;
-
-    // Enable cors if it is enabled globally else only enable it for a particular route
-    if (this.enableCors) {
-      router.use(cors());
-    } else if (endpoint.options?.enableCors) {
-      if (this.verbose) log(`Cors enabled for ${name}`);
-      router.use(cors());
-    }
-
-    if (endpoint.options?.enableFileUpload) {
-      if (this.verbose) log(`File upload enabled for ${name}`);
-      router.use(fileUpload());
-    }
-
-    switch (endpoint.requestType) {
-      case RequestType.GET:
-        router.get(`/${name}`, endpoint.options?.middlewares ?? [], handler);
-        break;
-
-      case RequestType.POST:
-        router.post(`/${name}`, endpoint.options?.middlewares ?? [], handler);
-        break;
-
-      case RequestType.PUT:
-        router.put(`/${name}`, endpoint.options?.middlewares ?? [], handler);
-        break;
-
-      case RequestType.DELETE:
-        router.delete(`/${name}`, endpoint.options?.middlewares ?? [], handler);
-        break;
-
-      case RequestType.PATCH:
-        router.patch(`/${name}`, endpoint.options?.middlewares ?? [], handler);
-        break;
-
-      default:
-        throw new Error(
-          `A unsupported RequestType was defined for a Endpoint.\n
-          Please make sure that the Endpoint file exports a RequestType
-          using the constants in src/system/constants/requests.ts.\n
-          **This value is required to add the Endpoint to the API**`
-        );
-    }
-    if (this.verbose)
-      log(
-        `Restful Endpoints - Added ${groupName}/${endpoint.requestType}:${name}`
-      );
   }
 }

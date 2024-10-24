@@ -32,7 +32,6 @@
     "moduleResolution": "node",
     "types": [
       "node",
-      "express"
     ],
     "esModuleInterop": true,
     "skipLibCheck": true,
